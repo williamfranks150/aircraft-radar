@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#030c08">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Aircraft radar for film sound departments — predict when planes will contaminate boom and lav microphone audio at a filming location.">
+<title>Aircraft Radar — Sound Dept</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23030c08'/%3E%3Ccircle cx='50' cy='50' r='40' fill='none' stroke='%2300d97a' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='25' fill='none' stroke='%23d4a017' stroke-width='2' stroke-dasharray='3 3'/%3E%3Ccircle cx='50' cy='50' r='3' fill='%23d4a017'/%3E%3Cpath d='M50 50 L80 30' stroke='%2300ff85' stroke-width='2'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700&family=Saira+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: #030c08;
+    color: #b8ccc2;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app {
+    max-width: 430px;
+    margin: 0 auto;
+    padding: 8px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .meta { display:flex; justify-content:space-between; font-size:9px; letter-spacing:.07em; text-transform:uppercase; color:#567060; margin-bottom:5px; padding:0 3px; gap:10px; }
+  .meta span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .banner { border-radius:8px; padding:10px 12px; margin-bottom:7px; border:1px solid; transition: all .3s; }
+  .banner.clear       { background:linear-gradient(135deg,rgba(0,210,120,.13),rgba(0,60,30,.25)); border-color:#00d97a; }
+  .banner.approaching { background:linear-gradient(135deg,rgba(255,180,30,.18),rgba(100,50,0,.3)); border-color:#ffb020; animation:pA 2s ease-in-out infinite; }
+  .banner.audible     { background:linear-gradient(135deg,rgba(255,50,50,.2),rgba(100,0,0,.35)); border-color:#ff4040; animation:pR 1.3s ease-in-out infinite; }
+  .banner.nodata      { background:linear-gradient(135deg,rgba(80,90,100,.18),rgba(30,40,50,.3)); border-color:#506070; }
+  @keyframes pA{ 0%,100%{box-shadow:0 0 20px rgba(255,180,30,.1) inset}50%{box-shadow:0 0 36px rgba(255,180,30,.3) inset}}
+  @keyframes pR{ 0%,100%{box-shadow:0 0 24px rgba(255,50,50,.15) inset}50%{box-shadow:0 0 44px rgba(255,50,50,.4) inset}}
+
+  .headline { font-family:'Bebas Neue',sans-serif; font-size:42px; line-height:.85; letter-spacing:.05em; margin:0; }
+  .banner.clear .headline       { color:#00ff95; text-shadow:0 0 12px rgba(0,255,149,.35); }
+  .banner.approaching .headline { color:#ffcc44; text-shadow:0 0 14px rgba(255,200,50,.5); }
+  .banner.audible .headline     { color:#ff5858; text-shadow:0 0 14px rgba(255,80,80,.6); }
+  .banner.nodata .headline      { color:#90a0b0; }
+  .subhead { font-size:9px; letter-spacing:.11em; text-transform:uppercase; opacity:.75; margin-top:4px; line-height:1.35; }
+  .decision-time { margin-top:7px; border-top:1px solid rgba(255,255,255,.08); padding-top:7px; display:grid; grid-template-columns:auto 1fr; grid-template-areas:"label note" "time time"; gap:1px 8px; align-items:end; }
+  .dt-label { grid-area:label; font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#d4a017; }
+  .dt-note { grid-area:note; font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:#829487; text-align:right; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .dt-main { grid-area:time; font-family:'Bebas Neue',sans-serif; font-size:44px; line-height:.88; letter-spacing:.035em; color:#e9f8ef; white-space:nowrap; }
+  .banner.clear .dt-main { color:#00ff95; text-shadow:0 0 10px rgba(0,255,149,.25); }
+  .banner.approaching .dt-main { color:#ffcc44; text-shadow:0 0 12px rgba(255,200,50,.45); }
+  .banner.audible .dt-main { color:#ff5858; text-shadow:0 0 12px rgba(255,80,80,.55); }
+  .banner.nodata .dt-main { color:#90a0b0; }
+  .range-strip {
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin:-1px 0 7px;
+  }
+  .range-pill {
+    background:rgba(10,25,18,.72); border:1px solid #12301f; border-radius:5px; padding:5px 4px;
+    font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:10px; letter-spacing:.12em;
+    text-transform:uppercase; text-align:center; color:#9fb8a7; white-space:nowrap;
+  }
+  .range-pill.mic { color:#f0c85a; border-color:rgba(212,160,23,.5); }
+  .range-pill.hot { color:#ff8080; border-color:rgba(255,80,80,.45); }
+  .range-pill.radar { color:#8fd8ff; border-color:rgba(100,180,220,.35); }
+
+  .loc { background:rgba(10,25,18,.8); border:1px solid #0e2418; border-radius:8px; padding:14px; margin-bottom:10px; }
+  .loc-title { font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:13px; letter-spacing:.15em; text-transform:uppercase; color:#d4a017; margin-bottom:10px; }
+  .search-row, .manual-row { display:flex; gap:6px; }
+  .manual-row { margin-top:7px; }
+  .search-input, .coord-input {
+    flex:1; min-width:0; background:#050e08; border:1px solid #1a3a2a; color:#dcebe4;
+    padding:11px 12px; border-radius:5px; font-family:'JetBrains Mono',monospace; font-size:13px;
+    -webkit-appearance:none; appearance:none;
+  }
+  .coord-input { font-size:12px; padding:10px 9px; }
+  .search-input:focus, .coord-input:focus { outline:none; border-color:#d4a017; }
+  .search-input::placeholder, .coord-input::placeholder { color:#506860; }
+  .search-btn {
+    padding:11px 16px; background:#d4a017; border:none; border-radius:5px; color:#050810;
+    font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:13px; letter-spacing:.12em;
+    text-transform:uppercase; cursor:pointer; white-space:nowrap;
+  }
+  .search-btn:disabled { opacity:.4; }
+
+  .search-error, .gps-msg, .loc-note { font-size:11px; color:#ff9060; margin-top:6px; line-height:1.45; }
+  .gps-msg.ok, .loc-note.ok { color:#90c8a0; }
+  .results { margin-top:8px; border:1px solid #1a3a2a; border-radius:5px; overflow:hidden; }
+  .result { display:block; width:100%; text-align:left; padding:9px 11px; background:transparent; border:none; border-bottom:1px solid rgba(26,58,42,.5); color:#c8d8cc; cursor:pointer; font-family:inherit; }
+  .result:last-child { border-bottom:none; }
+  .result:active { background:rgba(212,160,23,.15); }
+  .result-main { font-size:12px; font-weight:500; color:#e8f0e8; margin-bottom:2px; }
+  .result-sub  { font-size:10px; color:#7a8f80; word-break:break-word; }
+
+  .or-row { display:flex; align-items:center; gap:8px; margin:12px 0 8px; }
+  .or-row::before, .or-row::after { content:''; flex:1; height:1px; background:rgba(26,58,42,.6); }
+  .or { font-size:9px; letter-spacing:.18em; color:#506860; text-transform:uppercase; }
+
+  .gps-btn, .last-btn {
+    width:100%; padding:11px; background:rgba(0,217,122,.12); border:1px solid #00d97a; border-radius:5px;
+    color:#00ff95; font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:14px; letter-spacing:.12em;
+    text-transform:uppercase; cursor:pointer;
+  }
+  .last-btn { background:rgba(212,160,23,.11); border-color:#d4a017; color:#f0c85a; margin-top:7px; }
+  .gps-btn:disabled, .last-btn:disabled { opacity:.4; }
+  .city-row { display:flex; flex-wrap:wrap; gap:6px; }
+  .city-btn { padding:6px 11px; background:transparent; border:1px solid #1a3a2a; border-radius:3px; color:#90a898; font-family:'JetBrains Mono',monospace; font-size:11px; cursor:pointer; }
+  .city-btn:active { border-color:#d4a017; color:#d4a017; }
+
+  .loc-bar { display:flex; justify-content:space-between; align-items:center; background:rgba(10,25,18,.6); border:1px solid #0e2418; border-radius:5px; padding:7px 10px; margin-bottom:6px; gap:8px; }
+  .loc-current { font-size:11px; color:#a0b8a8; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .change-btn { background:transparent; border:1px solid #1a3a2a; color:#90a898; padding:4px 10px; border-radius:3px; font-family:'Saira Condensed',sans-serif; font-size:10px; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; flex-shrink:0; }
+
+  .radar-wrap { background:#020907; border:1px solid #0e2418; border-radius:8px; padding:5px; margin-bottom:8px; display:flex; justify-content:center; }
+  canvas { display:block; max-width:100%; }
+
+  .btns { display:flex; gap:6px; margin-bottom:8px; }
+  .btn { flex:1; padding:8px 4px; background:transparent; border:1px solid #1a3a2a; border-radius:4px; color:#90a898; font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:11px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
+  .btn:active { border-color:#d4a017; color:#d4a017; }
+  .btn.active { border-color:#ff4040; color:#ff7070; }
+  .btn:disabled { opacity:.35; }
+
+  .settings { background:rgba(10,20,15,.7); border:1px solid #0e2418; border-radius:6px; padding:12px; margin-bottom:10px; }
+  .srow { margin-bottom:11px; }
+  .srow:last-child { margin-bottom:0; }
+  .slabel { display:flex; justify-content:space-between; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#8090a0; margin-bottom:4px; }
+  .slabel .v { color:#d4a017; font-weight:700; }
+  .shint { font-size:9px; color:#506860; margin-top:3px; line-height:1.5; }
+  input[type=range] { width:100%; accent-color:#d4a017; }
+  .select { width:100%; background:#050e08; border:1px solid #1a3a2a; color:#dcebe4; padding:10px 12px; border-radius:5px; font-family:'JetBrains Mono',monospace; font-size:11px; -webkit-appearance:none; appearance:none; }
+  .select:focus { outline:none; border-color:#d4a017; }
+  .mic-summary { margin-top:7px; font-size:10px; color:#c8d8cc; line-height:1.4; }
+  .mic-chip-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+  .mic-chip {
+    min-height:34px; padding:7px 7px; background:#050e08; border:1px solid #1a3a2a; border-radius:5px;
+    color:#90a898; font-family:'JetBrains Mono',monospace; font-size:10px; line-height:1.2; text-align:left; cursor:pointer;
+  }
+  .mic-chip.active { border-color:#d4a017; color:#f0d070; background:rgba(212,160,23,.12); }
+  .mic-chip .kind { display:block; margin-top:2px; color:#607868; font-size:8px; letter-spacing:.08em; text-transform:uppercase; }
+
+  .sec { font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#d4a017; margin:10px 0 6px 2px; display:flex; align-items:center; gap:8px; }
+  .sec::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,rgba(212,160,23,.3),transparent); }
+
+  .card { background:rgba(10,20,15,.7); border:1px solid #0e2418; border-left-width:3px; border-radius:5px; padding:8px 10px; margin-bottom:5px; }
+  .card.audible     { border-left-color:#ff4040; background:rgba(50,10,10,.5); }
+  .card.approaching { border-left-color:#ffb020; background:rgba(40,25,0,.5); }
+  .card.clear       { border-left-color:#00d97a; }
+  .card.high        { border-left-color:#3a4850; opacity:.55; }
+  .card-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; gap:8px; }
+  .callsign { font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#e0eae0; }
+  .ctype { font-size:10px; color:#607868; margin-left:7px; }
+  .pill { font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:10px; letter-spacing:.12em; padding:2px 8px; border-radius:3px; text-transform:uppercase; white-space:nowrap; }
+  .pill.audible     { background:#ff4040; color:#fff; }
+  .pill.approaching { background:#ffb020; color:#1a0e00; }
+  .pill.clear       { background:#00d97a; color:#001810; }
+  .pill.high        { background:#3a4850; color:#90a8b0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-size:11px; }
+  .grid > div { display:flex; justify-content:space-between; gap:8px; }
+  .lbl { color:#607868; }
+  .val { color:#c8d8cc; font-weight:500; text-align:right; }
+  .val.warn  { color:#ffc040; }
+  .val.alert { color:#ff7070; }
+  .empty { text-align:center; padding:20px 0; color:#405850; font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+  .err { background:rgba(60,10,10,.5); border:1px solid #ff4040; border-radius:5px; padding:10px 12px; font-size:11px; color:#ffb0b0; margin-bottom:10px; line-height:1.5; }
+  .err strong { color:#ff8080; }
+  .retry-btn { margin-top:6px; background:transparent; border:1px solid #ff7070; color:#ff9090; padding:5px 12px; border-radius:3px; font-family:'Saira Condensed',sans-serif; font-size:11px; letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
+
+  .hint { font-size:9px; color:#506860; text-align:center; padding:8px 4px 4px; line-height:1.55; }
+  @media (max-height: 820px) {
+    .headline { font-size:38px; }
+    .dt-main { font-size:42px; }
+    .banner { padding:9px 11px; }
+    .loc-current { font-size:10px; }
+  }
+  .hint a { color:#7a8f80; text-decoration:none; border-bottom:1px dotted #506860; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="meta">
+    <span id="metaLoc">no location</span>
+    <span id="metaApi">—</span>
+  </div>
+
+  <div id="banner" class="banner nodata">
+    <div id="headline" class="headline">NO DATA</div>
+    <div id="decisionTime" class="decision-time">
+      <div id="dtLabel" class="dt-label">Sound Status</div>
+      <div id="dtNote" class="dt-note">set location</div>
+      <div id="dtMain" class="dt-main">—</div>
+    </div>
+    <div id="subhead" class="subhead">set a filming location below</div>
+  </div>
+
+  <div id="rangeStrip" class="range-strip">
+    <div id="rangeMic" class="range-pill mic">MIC 16 KM</div>
+    <div id="rangeHot" class="range-pill hot">HOT 8 KM</div>
+    <div id="rangeRadar" class="range-pill radar">RADAR 35 KM</div>
+  </div>
+
+  <div id="locPicker" class="loc">
+    <div class="loc-title">📍 Set Filming Location</div>
+
+    <div class="search-row">
+      <input type="text" id="searchInput" class="search-input"
+             placeholder="Address, city, postal code…"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button id="searchBtn" class="search-btn">Search</button>
+    </div>
+    <div id="searchError" class="search-error hidden"></div>
+    <div id="searchResults" class="results hidden"></div>
+
+    <div class="or-row"><span class="or">GPS</span></div>
+    <button id="gpsBtn" class="gps-btn">📡 Use Phone GPS</button>
+    <button id="lastBtn" class="last-btn hidden">Use Last Saved Location</button>
+    <div id="gpsMsg" class="gps-msg hidden"></div>
+
+    <div class="or-row"><span class="or">Manual coordinates</span></div>
+    <div class="manual-row">
+      <input type="number" id="latInput" class="coord-input" step="any" placeholder="lat">
+      <input type="number" id="lonInput" class="coord-input" step="any" placeholder="lon">
+      <button id="coordBtn" class="search-btn">Set</button>
+    </div>
+    <div id="coordMsg" class="loc-note hidden"></div>
+
+    <div class="or-row"><span class="or">Quick Cities</span></div>
+    <div class="city-row" id="cityRow"></div>
+  </div>
+
+  <div id="locBar" class="loc-bar hidden">
+    <span class="loc-current" id="locCurrent"></span>
+    <button class="change-btn" id="changeBtn">Change</button>
+  </div>
+
+  <div id="adsbErr" class="err hidden"></div>
+
+  <div class="radar-wrap">
+    <canvas id="radar"></canvas>
+  </div>
+
+  <div class="btns">
+    <button id="btnSettings" class="btn">⚙ Settings</button>
+    <button id="btnPause" class="btn">⏸ Pause</button>
+    <button id="btnRefresh" class="btn">↻ Refresh</button>
+  </div>
+
+  <div id="settings" class="settings hidden">
+    <div class="srow">
+      <div class="slabel"><span>Preset Mic Package</span><span class="v" id="packageVal">Boom + Lav Dialogue</span></div>
+      <select id="micPackageSelect" class="select">
+        <option value="boom_lav_dialogue">Boom + lav dialogue package</option>
+        <option value="exterior_quiet_dialogue">Quiet exterior dialogue package</option>
+        <option value="lav_heavy">Lav-heavy wardrobe package</option>
+        <option value="interior">Interior / controlled package</option>
+        <option value="custom_specific">Specific mics only</option>
+      </select>
+      <div class="mic-summary" id="packageSummary">Package loads: Sennheiser MKH 416 + Sanken COS-11D</div>
+      <div class="shint">Fast setup for common production sound layouts. Mic choice automatically rescales the radar view.</div>
+    </div>
+
+    <div class="srow">
+      <div class="slabel"><span>Specific Mic Override</span><span class="v" id="overrideVal">Package Mics</span></div>
+      <div class="mic-summary" id="activeMicSummary">Range based on: Sennheiser MKH 416 + Sanken COS-11D</div>
+      <div class="mic-chip-grid" id="micChipGrid"></div>
+      <div class="shint" id="profileHint">Tap the actual live mics. Selected mics override the preset and the app automatically uses the most conservative range.</div>
+    </div>
+
+    <div class="srow">
+      <div class="slabel"><span>Mic Concern Range</span><span class="v" id="micVal">16 km</span></div>
+      <input type="range" id="micSlider" min="4" max="30" step="0.5" value="16">
+      <div class="shint">Outer contamination radius for production microphones, not casual human hearing.</div>
+    </div>
+    <div class="srow">
+      <div class="slabel"><span>Hot Zone</span><span class="v" id="hotVal">7 km</span></div>
+      <input type="range" id="hotSlider" min="2" max="15" step="0.5" value="7">
+      <div class="shint">Closer ring for highly likely contamination.</div>
+    </div>
+    <div class="srow">
+      <div class="slabel"><span>Post-pass Buffer</span><span class="v" id="tailVal">20 s</span></div>
+      <input type="range" id="tailSlider" min="0" max="90" step="5" value="20">
+    </div>
+    <div class="srow">
+      <div class="slabel"><span>Ignore Above</span><span class="v" id="ceilVal">14,000 ft</span></div>
+      <input type="range" id="ceilSlider" min="3000" max="30000" step="500" value="14000">
+    </div>
+    <div class="srow">
+      <div class="slabel"><span>Radar Scale</span><span class="v" id="rangeVal">35 km auto</span></div>
+      <input type="range" id="rangeSlider" min="10" max="80" step="5" value="35">
+      <div class="shint">Auto-follows selected mics. Move this only to manually override the visible radar scale.</div>
+    </div>
+  </div>
+
+  <div id="threats"></div>
+  <div id="tracking"></div>
+  <div id="empty" class="empty hidden">— No aircraft in range —</div>
+
+  <div class="hint">
+    Geocoding: OpenStreetMap Nominatim · ADS-B: adsb.lol / airplanes.live / OpenSky
+    <br>
+    Some military, private, low-altitude, blocked, and non-broadcast aircraft may be missing.
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
+const SOUND_SPEED = 343;        // m/s
+const NM_TO_KM    = 1.852;
+const KM_PER_LAT  = 111.32;
+const D2R         = Math.PI / 180;
+const SWEEP_SPEED = 36;         // deg/sec
+const FT_PER_M    = 3.28084;
+const WARNING_WINDOW_SEC = 120; // caution window before a predicted mic hit
+const FETCH_INTERVAL_MS = 8000; // public feed refresh; radar blips dead-reckon between updates
+const STORE_KEY   = "sound_aircraft_radar_v2_location";
+const SETTINGS_KEY = "sound_aircraft_radar_v2_settings";
+const UI_KEY       = "sound_aircraft_radar_v2_ui";
+
+const CITIES = [
+  { name:"Toronto",     lat:43.6532, lon:-79.3832 },
+  { name:"Hamilton",    lat:43.2557, lon:-79.8711 },
+  { name:"Mississauga", lat:43.5890, lon:-79.6441 },
+  { name:"Vancouver",   lat:49.2827, lon:-123.1207 },
+  { name:"Los Angeles", lat:34.0522, lon:-118.2437 },
+  { name:"Atlanta",     lat:33.7490, lon:-84.3880 },
+  { name:"NYC",         lat:40.7128, lon:-74.0060 },
+  { name:"London",      lat:51.5074, lon:-0.1278 },
+];
+
+const MIC_PROFILES = {
+  boom_lav_dialogue:       { label:"Boom + Lav Dialogue", micRange:16, hotRange:8, tailBuffer:25, altCeil:14000, range:35, hint:"General dialogue default: boom plus exposed wardrobe lavs." },
+  exterior_quiet_dialogue: { label:"Quiet Exterior Dialogue", micRange:22, hotRange:11, tailBuffer:40, altCeil:18000, range:50, hint:"Most cautious preset for quiet exteriors, wide shots, and open locations." },
+  lav_heavy:               { label:"Lav-Heavy Wardrobe", micRange:20, hotRange:10, tailBuffer:35, altCeil:18000, range:45, hint:"Use when lavs are the critical production track." },
+  interior:                { label:"Interior / Controlled", micRange:8, hotRange:4, tailBuffer:15, altCeil:10000, range:25, hint:"Use indoors or where building isolation reduces exterior aircraft contamination." },
+
+  mkh416:                  { label:"Sennheiser MKH 416", micRange:13, hotRange:6, tailBuffer:20, altCeil:13000, range:30, hint:"Common exterior shotgun boom profile." },
+  mkh8060:                 { label:"Sennheiser MKH 8060", micRange:14, hotRange:7, tailBuffer:20, altCeil:14000, range:35, hint:"Short shotgun boom profile." },
+  mkh50:                   { label:"Sennheiser MKH 50", micRange:11, hotRange:5, tailBuffer:18, altCeil:12000, range:30, hint:"Hypercardioid boom profile, usually less exposed than long exterior shotgun use." },
+  cmit5u:                  { label:"Schoeps CMIT 5U", micRange:15, hotRange:7.5, tailBuffer:25, altCeil:15000, range:35, hint:"High-end shotgun boom profile." },
+  minicmit:                { label:"Schoeps MiniCMIT", micRange:14, hotRange:7, tailBuffer:25, altCeil:14500, range:35, hint:"Compact shotgun boom profile." },
+  mk41:                    { label:"Schoeps CMC/MK 41", micRange:12, hotRange:6, tailBuffer:20, altCeil:13000, range:30, hint:"Supercardioid boom profile for dialogue." },
+  dpa4017:                 { label:"DPA 4017", micRange:14, hotRange:7, tailBuffer:22, altCeil:14000, range:35, hint:"Shotgun boom profile." },
+  dpa4018:                 { label:"DPA 4018", micRange:12, hotRange:6, tailBuffer:20, altCeil:13000, range:30, hint:"Supercardioid boom profile." },
+
+  cos11d:                  { label:"Sanken COS-11D", micRange:18, hotRange:9, tailBuffer:30, altCeil:16000, range:40, hint:"Standard wardrobe lav profile." },
+  dpa4060:                 { label:"DPA 4060", micRange:20, hotRange:10, tailBuffer:35, altCeil:17000, range:45, hint:"Sensitive lav profile; use cautiously on quiet sets." },
+  dpa6060:                 { label:"DPA 6060", micRange:18, hotRange:9, tailBuffer:30, altCeil:16000, range:40, hint:"Subminiature lav profile." },
+  countryman_b6:           { label:"Countryman B6", micRange:18, hotRange:9, tailBuffer:30, altCeil:16000, range:40, hint:"Subminiature wardrobe lav profile." },
+  mke2:                    { label:"Sennheiser MKE 2", micRange:17, hotRange:8.5, tailBuffer:30, altCeil:15500, range:40, hint:"Wardrobe lav profile." },
+  twinplex_tl47:           { label:"Shure TwinPlex TL47", micRange:19, hotRange:9.5, tailBuffer:32, altCeil:16500, range:45, hint:"Wardrobe lav profile." },
+
+  custom:                  { label:"Custom", hint:"Manual slider values." }
+};
+
+const MIC_PACKAGE_MICS = {
+  boom_lav_dialogue: ["mkh416", "cos11d"],
+  exterior_quiet_dialogue: ["cmit5u", "dpa4060"],
+  lav_heavy: ["cos11d", "dpa4060", "dpa6060", "twinplex_tl47"],
+  interior: ["mkh50", "mk41"]
+};
+
+const MIC_CHOICES = [
+  "mkh416", "mkh8060", "mkh50", "cmit5u", "minicmit", "mk41", "dpa4017", "dpa4018",
+  "cos11d", "dpa4060", "dpa6060", "countryman_b6", "mke2", "twinplex_tl47"
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const state = {
+  loc: null,
+  showLocPicker: true,
+  savedLoc: null,
+  search: { query: "", results: [], loading: false, error: null },
+  gps: { state: "idle", message: "" },
+  adsb: {
+    state: "idle",
+    source: null,
+    error: null,
+    lastFetch: null,
+    planes: [],
+    preferredSource: null,
+  },
+  settings: {
+    micPackage: "boom_lav_dialogue",
+    activeMics: ["mkh416", "cos11d"],
+    micRange: 16,
+    hotRange: 8,
+    tailBuffer: 25,
+    altCeil: 14000,
+    range: 35,
+    rangeAuto: true
+  },
+  paused: false,
+  showSets: false,
+  analyzed: [],
+  sweep: 0,
+  prevSweep: 0,
+  echoes: new Map(),
+  rafLast: null,
+  fetchTimer: null,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function $(id) { return document.getElementById(id); }
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function fmtSec(s) {
+  if (!isFinite(s) || s < 0) return "—";
+  const total = Math.max(0, Math.round(s));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return mins + "m " + secs.toString().padStart(2,"0") + "s";
+}
+
+function feedAgeSec() {
+  if (!state.adsb.lastFetch) return 0;
+  return Math.max(0, (Date.now() - state.adsb.lastFetch) / 1000);
+}
+
+function liveSec(s) {
+  if (s === null || s === undefined || !isFinite(s)) return null;
+  return Math.max(0, s - feedAgeSec());
+}
+
+function fmtLive(s) {
+  const v = liveSec(s);
+  return v === null ? "—" : fmtSec(v);
+}
+
+function compassDir(deg) {
+  return ["N","NE","E","SE","S","SW","W","NW"][Math.round(deg/45) % 8];
+}
+
+function toXY(lat, lon, oLat, oLon) {
+  return {
+    x: (lon - oLon) * KM_PER_LAT * Math.cos(oLat * D2R),
+    y: (lat - oLat) * KM_PER_LAT,
+  };
+}
+
+function bearing(lat1, lon1, lat2, lon2) {
+  const dL = (lon2 - lon1) * D2R;
+  const y  = Math.sin(dL) * Math.cos(lat2 * D2R);
+  const x  = Math.cos(lat1 * D2R) * Math.sin(lat2 * D2R)
+    - Math.sin(lat1 * D2R) * Math.cos(lat2 * D2R) * Math.cos(dL);
+  return (Math.atan2(y, x) / D2R + 360) % 360;
+}
+
+function readJSON(key) {
+  try { return JSON.parse(localStorage.getItem(key)); }
+  catch { return null; }
+}
+
+function writeJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch {}
+}
+
+function getAltFt(ac) {
+  if (ac.alt_baro === "ground") return 0;
+  if (typeof ac.alt_baro === "number") return ac.alt_baro;
+  if (typeof ac.alt_geom === "number") return ac.alt_geom;
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AIRCRAFT ANALYSIS — microphone contamination model
+// ═══════════════════════════════════════════════════════════════════════════
+function analyzeAC(ac, oLat, oLon, s) {
+  const { lat, lon } = ac;
+  if (lat == null || lon == null) return null;
+
+  const altFt = getAltFt(ac);
+  if (altFt === null || altFt < 0) return null;
+
+  const altM = altFt / FT_PER_M;
+  const altKm = altM / 1000;
+  const { x:px, y:py } = toXY(lat, lon, oLat, oLon);
+  const horizKm = Math.sqrt(px*px + py*py);
+  const slantKm = Math.sqrt(horizKm*horizKm + altKm*altKm);
+  const bear    = bearing(oLat, oLon, lat, lon);
+  const soundDelayNow = (slantKm * 1000) / SOUND_SPEED;
+
+  const speedKmS = (ac.gs || 0) * NM_TO_KM / 3600;
+  const tr  = (ac.track || 0) * D2R;
+  const vx  = speedKmS * Math.sin(tr);
+  const vy  = speedKmS * Math.cos(tr);
+  const vSq = vx*vx + vy*vy;
+
+  let tCPA = 0, cpaKm = horizKm;
+  if (vSq > 1e-9) {
+    tCPA = Math.max(0, -(px*vx + py*vy) / vSq);
+    cpaKm = Math.sqrt((px+vx*tCPA)*(px+vx*tCPA) + (py+vy*tCPA)*(py+vy*tCPA));
+  }
+
+  const tooHigh = altFt > s.altCeil;
+  const hMicSq = s.micRange*s.micRange - altKm*altKm;
+  const hHotSq = s.hotRange*s.hotRange - altKm*altKm;
+
+  let micEntryT = null, micExitT = null, hotEntryT = null;
+  let inMic = false, inHot = false;
+
+  function crossingTimes(hRadius) {
+    const inR = horizKm <= hRadius;
+    if (vSq <= 1e-9) return { inR, entry: inR ? 0 : null, exit: null };
+    const a = vSq, b = 2*(px*vx+py*vy), c = horizKm*horizKm - hRadius*hRadius;
+    const disc = b*b - 4*a*c;
+    if (disc < 0) return { inR, entry: null, exit: null };
+    const sq = Math.sqrt(disc);
+    const t1 = (-b - sq)/(2*a);
+    const t2 = (-b + sq)/(2*a);
+    if (t2 < 0) return { inR, entry: null, exit: null };
+    return { inR, entry: t1 > 0 ? t1 : 0, exit: t2 };
+  }
+
+  if (!tooHigh && hMicSq > 0) {
+    const c = crossingTimes(Math.sqrt(hMicSq));
+    inMic = c.inR;
+    micEntryT = c.entry;
+    micExitT = c.exit;
+  }
+
+  if (!tooHigh && hHotSq > 0) {
+    const c = crossingTimes(Math.sqrt(hHotSq));
+    inHot = c.inR;
+    hotEntryT = c.entry;
+  }
+
+  const micSoundTravel = (s.micRange * 1000) / SOUND_SPEED;
+  const hotSoundTravel = (s.hotRange * 1000) / SOUND_SPEED;
+  const micHeardIn = inMic ? 0 : (micEntryT !== null ? micEntryT + micSoundTravel : null);
+  const hotHeardIn = inHot ? 0 : (hotEntryT !== null ? hotEntryT + hotSoundTravel : null);
+  const micClearIn = micExitT !== null ? micExitT + micSoundTravel + s.tailBuffer : null;
+
+  const status = tooHigh ? "high"
+    : inMic ? "audible"
+    : (micHeardIn !== null && micHeardIn <= WARNING_WINDOW_SEC) ? "approaching"
+    : "clear";
+
+  return {
+    icao: ac.hex || ac.icao24 || String(Math.random()),
+    callsign: (ac.flight||"").trim() || (ac.hex||"").toUpperCase() || "UNKNOWN",
+    type: ac.t || "?",
+    reg:  ac.r || null,
+    altFt, gs: ac.gs || 0, track: ac.track || 0, vx, vy,
+    localX: px, localY: py,
+    horizKm, slantKm, bearing: bear, soundDelayNow,
+    tCPA, cpaKm, tooHigh, inMic, inHot,
+    micEntryT, micExitT, micHeardIn, hotHeardIn, micClearIn,
+    status,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEOCODING — Nominatim
+// ═══════════════════════════════════════════════════════════════════════════
+async function geocode(query) {
+  if (!query || !query.trim()) return [];
+  const url = "https://nominatim.openstreetmap.org/search?q=" +
+    encodeURIComponent(query.trim()) + "&format=json&limit=6&addressdetails=1";
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { "Accept-Language": "en" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error("Search service returned " + res.status);
+    const data = await res.json();
+    return data.map(r => ({
+      lat: parseFloat(r.lat),
+      lon: parseFloat(r.lon),
+      accuracy: null,
+      fullLabel: r.display_name,
+      shortLabel: shortLabel(r),
+      source: "address"
+    }));
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("Search timed out — try again");
+    throw new Error(e.message || "Search failed");
+  }
+}
+
+function shortLabel(r) {
+  const a = r.address || {};
+  const place = a.house_number && a.road ? a.house_number + " " + a.road
+              : a.road || a.neighbourhood || a.suburb || a.village || a.town || a.city || a.county;
+  const region = a.city || a.town || a.village || a.county;
+  const country = a.country_code ? a.country_code.toUpperCase() : "";
+  const parts = [place, region !== place ? region : null, country].filter(Boolean);
+  if (parts.length === 0) return (r.display_name || "Unknown").split(",").slice(0,2).join(",");
+  return parts.join(", ");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADS-B — fallback chain
+// ═══════════════════════════════════════════════════════════════════════════
+const ADSB_SOURCES = [
+  {
+    name: "adsb.lol",
+    url: (lat, lon, nm) => "https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm,
+    parse: d => Array.isArray(d && d.ac) ? d.ac : [],
+  },
+  {
+    name: "airplanes.live",
+    url: (lat, lon, nm) => "https://api.airplanes.live/v2/point/" + lat + "/" + lon + "/" + nm,
+    parse: d => Array.isArray(d && d.ac) ? d.ac : [],
+  },
+  {
+    name: "opensky",
+    url: (lat, lon, nm) => {
+      const dLat = (nm * NM_TO_KM) / KM_PER_LAT;
+      const dLon = (nm * NM_TO_KM) / (KM_PER_LAT * Math.cos(lat * D2R));
+      return "https://opensky-network.org/api/states/all?lamin=" + (lat-dLat)
+        + "&lomin=" + (lon-dLon) + "&lamax=" + (lat+dLat) + "&lomax=" + (lon+dLon);
+    },
+    parse: d => {
+      if (!Array.isArray(d && d.states)) return [];
+      return d.states.map(s => ({
+        hex: s[0], flight: s[1] || "",
+        lat: s[6], lon: s[5],
+        alt_baro: s[7] != null ? s[7] * FT_PER_M : null,
+        gs: s[9] != null ? s[9] / 0.5144 : 0,
+        track: s[10] || 0,
+        t: "?", r: null,
+      })).filter(a => a.lat != null && a.lon != null);
+    },
+  },
+];
+
+async function fetchADSB(lat, lon, nm, preferred) {
+  const ordered = preferred
+    ? [...ADSB_SOURCES].sort((a,b) =>
+        (a.name === preferred ? -1 : 0) - (b.name === preferred ? -1 : 0))
+    : ADSB_SOURCES;
+
+  const errors = [];
+  for (const src of ordered) {
+    try {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const res = await fetch(src.url(lat, lon, nm), { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      return { source: src.name, planes: src.parse(data) };
+    } catch (e) {
+      const msg = e.name === "AbortError" ? "timeout" : (e.message || "failed");
+      errors.push(src.name + ":" + msg);
+    }
+  }
+  throw new Error(errors.join(" · "));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOCATION
+// ═══════════════════════════════════════════════════════════════════════════
+function setLocation(l) {
+  state.loc = {
+    lat: Number(l.lat),
+    lon: Number(l.lon),
+    accuracy: l.accuracy ?? null,
+    shortLabel: l.shortLabel || "Manual Location",
+    fullLabel: l.fullLabel || l.shortLabel || "Manual Location",
+    source: l.source || "manual"
+  };
+  state.showLocPicker = false;
+  state.search.results = [];
+  state.search.query = "";
+  state.search.error = null;
+  $("searchInput").value = "";
+  writeJSON(STORE_KEY, state.loc);
+  state.savedLoc = state.loc;
+  state.adsb.preferredSource = null;
+  renderAll();
+  startFetchLoop();
+}
+
+function getPosition(opts) {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, opts);
+  });
+}
+
+function geoErrorMessage(err) {
+  if (!err) return "GPS failed.";
+  if (err.code === 1) return "GPS permission denied. In phone settings, allow location for this browser, then reload this HTTPS page.";
+  if (err.code === 2) return "Phone could not determine position. Turn on Location Services and try outdoors or near a window.";
+  if (err.code === 3) return "GPS timed out. Try again, or enter the filming location manually.";
+  return err.message || "GPS failed.";
+}
+
+async function tryGPS() {
+  if (!window.isSecureContext) {
+    state.gps.state = "failed";
+    state.gps.message = "GPS requires HTTPS. Open the GitHub Pages https:// link, not file:// or http://.";
+    renderLocPicker();
+    return;
+  }
+  if (!navigator.geolocation) {
+    state.gps.state = "unavailable";
+    state.gps.message = "Geolocation is not supported in this browser.";
+    renderLocPicker();
+    return;
+  }
+
+  state.gps.state = "requesting";
+  state.gps.message = "Requesting phone location…";
+  renderLocPicker();
+
+  let firstError = null;
+  try {
+    const pos = await getPosition({ enableHighAccuracy:false, timeout:12000, maximumAge:300000 });
+    const acc = pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : null;
+    setLocation({
+      lat: pos.coords.latitude,
+      lon: pos.coords.longitude,
+      accuracy: acc,
+      shortLabel: "Phone GPS" + (acc ? " ±" + acc + " m" : ""),
+      fullLabel: "GPS: " + pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5),
+      source: "gps"
+    });
+    state.gps.state = "ok";
+    state.gps.message = "GPS set" + (acc ? " to ±" + acc + " m." : ".");
+    renderLocPicker();
+
+    // Refine in background. If the high-accuracy fix is better, update saved location.
+    refineGPS(pos.coords.accuracy || Infinity);
+    return;
+  } catch (e) {
+    firstError = e;
+  }
+
+  if (firstError && firstError.code === 1) {
+    state.gps.state = "denied";
+    state.gps.message = geoErrorMessage(firstError);
+    renderLocPicker();
+    return;
+  }
+
+  try {
+    state.gps.message = "Trying high-accuracy GPS…";
+    renderLocPicker();
+    const pos = await getPosition({ enableHighAccuracy:true, timeout:30000, maximumAge:0 });
+    const acc = pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : null;
+    state.gps.state = "ok";
+    state.gps.message = "GPS set" + (acc ? " to ±" + acc + " m." : ".");
+    setLocation({
+      lat: pos.coords.latitude,
+      lon: pos.coords.longitude,
+      accuracy: acc,
+      shortLabel: "Phone GPS" + (acc ? " ±" + acc + " m" : ""),
+      fullLabel: "GPS: " + pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5),
+      source: "gps"
+    });
+  } catch (e) {
+    state.gps.state = e.code === 1 ? "denied" : "failed";
+    state.gps.message = geoErrorMessage(e);
+    renderLocPicker();
+  }
+}
+
+async function refineGPS(previousAccuracy) {
+  try {
+    const pos = await getPosition({ enableHighAccuracy:true, timeout:30000, maximumAge:0 });
+    const acc = pos.coords.accuracy || Infinity;
+    if (!state.loc || state.loc.source !== "gps") return;
+    if (acc < previousAccuracy) {
+      state.loc.lat = pos.coords.latitude;
+      state.loc.lon = pos.coords.longitude;
+      state.loc.accuracy = Math.round(acc);
+      state.loc.shortLabel = "Phone GPS ±" + Math.round(acc) + " m";
+      state.loc.fullLabel = "GPS: " + pos.coords.latitude.toFixed(5) + ", " + pos.coords.longitude.toFixed(5);
+      writeJSON(STORE_KEY, state.loc);
+      renderAll();
+      startFetchLoop();
+    }
+  } catch {}
+}
+
+function setFromManual() {
+  const lat = parseFloat($("latInput").value);
+  const lon = parseFloat($("lonInput").value);
+  const msg = $("coordMsg");
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    msg.textContent = "Enter valid coordinates. Example Toronto: 43.6532, -79.3832";
+    msg.className = "loc-note";
+    msg.classList.remove("hidden");
+    return;
+  }
+  msg.classList.add("hidden");
+  setLocation({
+    lat, lon,
+    shortLabel: "Manual: " + lat.toFixed(4) + ", " + lon.toFixed(4),
+    fullLabel: "Manual coordinates",
+    source: "manual"
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════════
+function recomputeAnalyzed() {
+  if (!state.loc) { state.analyzed = []; return; }
+  state.analyzed = state.adsb.planes
+    .map(ac => analyzeAC(ac, state.loc.lat, state.loc.lon, state.settings))
+    .filter(Boolean)
+    .filter(p => p.horizKm <= state.settings.range * 1.6)
+    .sort((a, b) => {
+      const rank = x => ({ audible:0, approaching:1, clear:2, high:3 }[x.status] ?? 4);
+      const ta = a.micHeardIn ?? 99999;
+      const tb = b.micHeardIn ?? 99999;
+      return rank(a.status) - rank(b.status) || ta - tb || a.horizKm - b.horizKm;
+    });
+}
+
+function livePlaneStatus(p) {
+  if (!p || p.tooHigh) return "high";
+  const hit = liveSec(p.micHeardIn);
+  const clear = liveSec(p.micClearIn);
+  if (hit !== null && hit <= 0 && clear !== null && clear > 0) return "audible";
+  if (hit !== null && hit <= WARNING_WINDOW_SEC) return "approaching";
+  return "clear";
+}
+
+function soundIntervals() {
+  const intervals = [];
+  state.analyzed.forEach(p => {
+    if (!p || p.tooHigh || p.micHeardIn === null || p.micClearIn === null) return;
+    const start = liveSec(p.micHeardIn);
+    const end = liveSec(p.micClearIn);
+    if (start === null || end === null || end <= 0) return;
+    intervals.push({ start, end, p });
+  });
+  intervals.sort((a,b) => a.start - b.start || a.end - b.end);
+  if (intervals.length === 0) return { intervals, pollutedNow:false, next:null, clearIn:null };
+
+  const merged = [];
+  intervals.forEach(it => {
+    const start = Math.max(0, it.start);
+    const end = Math.max(start, it.end);
+    const last = merged[merged.length - 1];
+    if (last && start <= last.end) {
+      last.end = Math.max(last.end, end);
+      last.planes.push(it.p);
+    } else {
+      merged.push({ start, end, planes:[it.p] });
+    }
+  });
+
+  const first = merged[0];
+  if (!first) return { intervals:merged, pollutedNow:false, next:null, clearIn:null };
+  if (first.start <= 0 && first.end > 0) {
+    return { intervals:merged, pollutedNow:true, next:first, clearIn:first.end };
+  }
+  return { intervals:merged, pollutedNow:false, next:first, clearIn:null };
+}
+
+function overallStatus() {
+  if (!state.loc || state.adsb.state !== "ok") return "nodata";
+  const plan = soundIntervals();
+  if (plan.pollutedNow) return "audible";
+  if (plan.next && plan.next.start <= WARNING_WINDOW_SEC) return "approaching";
+  return "clear";
+}
+
+function renderMeta() {
+  $("metaLoc").textContent = state.loc
+    ? state.loc.lat.toFixed(4) + ", " + state.loc.lon.toFixed(4)
+    : "no location";
+  const a = state.adsb;
+  const secs = a.lastFetch ? Math.round((Date.now() - a.lastFetch) / 1000) : null;
+  let api = "—";
+  if (a.state === "loading") api = "⟳ loading…";
+  else if (a.state === "ok") api = a.source + " · " + secs + "s ago";
+  else if (a.state === "error") api = "⚠ feed error";
+  $("metaApi").textContent = api;
+}
+
+function renderRangeStrip() {
+  const auto = state.settings.rangeAuto !== false ? " AUTO" : " MAN";
+  if ($("rangeMic")) $("rangeMic").textContent = "MIC " + state.settings.micRange + " KM";
+  if ($("rangeHot")) $("rangeHot").textContent = "HOT " + state.settings.hotRange + " KM";
+  if ($("rangeRadar")) $("rangeRadar").textContent = "RADAR " + state.settings.range + " KM" + auto;
+}
+
+function renderBanner() {
+  const status = overallStatus();
+  const banner = $("banner");
+  banner.className = "banner " + status;
+  const headlines = {
+    clear:"SOUND CLEAR",
+    approaching:"PLANE WARNING",
+    audible:"POLLUTED SOUND",
+    nodata:"NO DATA"
+  };
+  $("headline").textContent = headlines[status];
+
+  let sub = "";
+  let dtLabel = "Next Plane In";
+  let dtMain = "—";
+  let dtNote = "set location";
+  const plan = soundIntervals();
+
+  if (status === "clear") {
+    dtLabel = "Next Plane In";
+    if (plan.next) {
+      dtMain = fmtSec(plan.next.start);
+      const p = plan.next.planes[0];
+      dtNote = p ? (p.callsign + " · " + p.horizKm.toFixed(1) + " km " + compassDir(p.bearing)) : "predicted mic hit";
+      sub = "warning only · production decides whether there is time for the take";
+    } else {
+      dtMain = "CLEAR";
+      dtNote = "no predicted mic hit";
+      sub = state.analyzed.length + " tracked · no plane predicted for selected mics";
+    }
+  } else if (status === "approaching") {
+    dtLabel = "Next Plane In";
+    dtMain = plan.next ? fmtSec(plan.next.start) : "SOON";
+    const p = plan.next && plan.next.planes.length ? plan.next.planes[0] : null;
+    dtNote = p ? (p.callsign + " · " + p.horizKm.toFixed(1) + " km " + compassDir(p.bearing)) : "incoming";
+    sub = "dialogue pollution warning · selected mics may become unusable";
+  } else if (status === "audible") {
+    dtLabel = "Sound Clear In";
+    dtMain = plan.clearIn !== null ? fmtSec(plan.clearIn) : "NOW";
+    const count = plan.next ? plan.next.planes.length : 1;
+    dtNote = count > 1 ? (count + " aircraft contributing") : "aircraft on selected mics";
+    sub = "dialogue may be polluted now · warning only, production keeps authority";
+  } else {
+    dtLabel = !state.loc ? "Location Needed" : "Aircraft Feed";
+    dtMain = "—";
+    dtNote = !state.loc ? "GPS / address / manual" : state.adsb.state;
+    sub = !state.loc ? "set a filming location below"
+        : state.adsb.state === "loading" ? "loading aircraft feed…"
+        : "aircraft feed unavailable";
+  }
+
+  $("dtLabel").textContent = dtLabel;
+  $("dtMain").textContent = dtMain;
+  $("dtNote").textContent = dtNote;
+  $("subhead").textContent = sub;
+  renderRangeStrip();
+}
+
+function renderLocPicker() {
+  const show = !state.loc || state.showLocPicker;
+  $("locPicker").classList.toggle("hidden", !show);
+  $("locBar").classList.toggle("hidden", show);
+
+  if (state.loc && !state.showLocPicker) {
+    const acc = state.loc.accuracy ? " · ±" + state.loc.accuracy + " m" : "";
+    $("locCurrent").textContent = "📍 " + state.loc.shortLabel + acc;
+  }
+
+  const resWrap = $("searchResults");
+  if (state.search.results.length > 0) {
+    resWrap.innerHTML = state.search.results.map((r, i) =>
+      '<button class="result" data-i="' + i + '">' +
+        '<div class="result-main">' + esc(r.shortLabel) + '</div>' +
+        '<div class="result-sub">' + esc(r.fullLabel) + '</div>' +
+      '</button>'
+    ).join("");
+    resWrap.classList.remove("hidden");
+  } else {
+    resWrap.classList.add("hidden");
+    resWrap.innerHTML = "";
+  }
+
+  const errEl = $("searchError");
+  if (state.search.error) {
+    errEl.textContent = state.search.error;
+    errEl.classList.remove("hidden");
+  } else errEl.classList.add("hidden");
+
+  $("searchBtn").disabled = state.search.loading || !state.search.query.trim();
+  $("searchBtn").textContent = state.search.loading ? "…" : "Search";
+
+  $("gpsBtn").disabled = state.gps.state === "requesting";
+  $("gpsBtn").textContent = state.gps.state === "requesting" ? "📡 Getting GPS…" : "📡 Use Phone GPS";
+
+  $("lastBtn").classList.toggle("hidden", !state.savedLoc);
+  $("lastBtn").disabled = !state.savedLoc;
+
+  const gpsMsg = $("gpsMsg");
+  if (state.gps.message) {
+    gpsMsg.textContent = state.gps.message;
+    gpsMsg.className = state.gps.state === "ok" || state.gps.state === "requesting" ? "gps-msg ok" : "gps-msg";
+    gpsMsg.classList.remove("hidden");
+  } else gpsMsg.classList.add("hidden");
+}
+
+function renderAdsbError() {
+  const el = $("adsbErr");
+  if (state.adsb.state === "error" && state.adsb.error) {
+    el.innerHTML =
+      '<strong>Aircraft feeds unreachable.</strong> Tried: ' + esc(state.adsb.error) +
+      '<br><button class="retry-btn" id="retryBtn">↻ Retry</button>' +
+      '<span style="font-size:10px; margin-left:10px; opacity:.7">' +
+        'Public feeds may be rate-limiting or blocking browser access.</span>';
+    el.classList.remove("hidden");
+    const retry = $("retryBtn");
+    if (retry) retry.onclick = () => doFetch();
+  } else {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+  }
+}
+
+function getActiveMicIds() {
+  const ids = Array.isArray(state.settings.activeMics) ? state.settings.activeMics : [];
+  return ids.filter(id => MIC_CHOICES.includes(id) && MIC_PROFILES[id]);
+}
+
+function activeMicLabel() {
+  const ids = getActiveMicIds();
+  if (ids.length === 0) return "No active mics selected";
+  if (ids.length <= 2) return ids.map(id => MIC_PROFILES[id].label).join(" + ");
+  return ids.slice(0,2).map(id => MIC_PROFILES[id].label).join(" + ") + " + " + (ids.length - 2) + " more";
+}
+
+function sameMicSet(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const A = new Set(a), B = new Set(b);
+  return [...A].every(x => B.has(x));
+}
+
+function currentMicPackage() {
+  const pkg = state.settings.micPackage || state.settings.micProfile || "boom_lav_dialogue";
+  return pkg in MIC_PACKAGE_MICS ? pkg : "custom_specific";
+}
+
+function packageMicLabel(pkgId) {
+  if (!(pkgId in MIC_PACKAGE_MICS)) return "Specific mics only";
+  return MIC_PACKAGE_MICS[pkgId].map(id => MIC_PROFILES[id].label).join(" + ");
+}
+
+function activeMatchesCurrentPackage() {
+  const pkg = currentMicPackage();
+  return pkg in MIC_PACKAGE_MICS && sameMicSet(getActiveMicIds(), MIC_PACKAGE_MICS[pkg]);
+}
+
+function roundUp5(v) {
+  return Math.ceil(v / 5) * 5;
+}
+
+function autoRadarRangeFor(micRange, profileRange) {
+  const base = Math.max(profileRange || 0, micRange + 10, micRange * 1.8);
+  return Math.min(80, Math.max(15, roundUp5(base)));
+}
+
+function updateSettingsFromActiveMics() {
+  const ids = getActiveMicIds();
+  state.settings.activeMics = ids;
+  if (ids.length === 0) {
+    state.settings.micPackage = "custom_specific";
+    return;
+  }
+  const profiles = ids.map(id => MIC_PROFILES[id]).filter(p => p && typeof p.micRange === "number");
+  state.settings.micRange = Math.max(...profiles.map(p => p.micRange));
+  state.settings.hotRange = Math.max(...profiles.map(p => p.hotRange));
+  state.settings.tailBuffer = Math.max(...profiles.map(p => p.tailBuffer));
+  state.settings.altCeil = Math.max(...profiles.map(p => p.altCeil));
+  state.settings.range = autoRadarRangeFor(state.settings.micRange, Math.max(...profiles.map(p => p.range || 0)));
+  state.settings.rangeAuto = true;
+}
+
+function renderMicChips() {
+  const grid = $("micChipGrid");
+  if (!grid) return;
+  const active = new Set(getActiveMicIds());
+  grid.innerHTML = MIC_CHOICES.map(id => {
+    const p = MIC_PROFILES[id];
+    const kind = ["cos11d","dpa4060","dpa6060","countryman_b6","mke2","twinplex_tl47"].includes(id) ? "lav" : "boom";
+    return '<button type="button" class="mic-chip ' + (active.has(id) ? 'active' : '') + '" data-mic="' + id + '">' +
+      esc(p.label) + '<span class="kind">' + kind + ' · mic ' + p.micRange + ' km · radar ' + autoRadarRangeFor(p.micRange, p.range || 0) + ' km</span></button>';
+  }).join("");
+}
+
+function renderSettings() {
+  $("settings").classList.toggle("hidden", !state.showSets);
+  $("btnSettings").textContent = state.showSets ? "Hide Settings" : "⚙ Settings";
+
+  const pkgId = currentMicPackage();
+  const pkg = MIC_PROFILES[pkgId] || MIC_PROFILES.custom;
+  const packageActive = activeMatchesCurrentPackage();
+
+  $("packageVal").textContent = pkgId in MIC_PACKAGE_MICS ? pkg.label : "Specific Mics";
+  $("micPackageSelect").value = pkgId in MIC_PACKAGE_MICS ? pkgId : "custom_specific";
+  $("packageSummary").textContent = pkgId in MIC_PACKAGE_MICS
+    ? "Package loads: " + packageMicLabel(pkgId)
+    : "No package active. Range is based on the selected specific mics.";
+  $("overrideVal").textContent = packageActive ? "Package Mics" : "Override Active";
+  $("activeMicSummary").textContent = "Range based on: " + activeMicLabel();
+  $("profileHint").textContent = "Tap the actual live mics. Selection immediately recalculates mic sensitivity and radar scale.";
+  renderMicChips();
+
+  $("micVal").textContent = state.settings.micRange + " km";
+  $("hotVal").textContent = state.settings.hotRange + " km";
+  $("tailVal").textContent = fmtSec(state.settings.tailBuffer);
+  $("ceilVal").textContent = state.settings.altCeil.toLocaleString() + " ft";
+  $("rangeVal").textContent = state.settings.range + " km " + (state.settings.rangeAuto !== false ? "auto" : "manual");
+
+  $("micSlider").value = state.settings.micRange;
+  $("hotSlider").value = state.settings.hotRange;
+  $("tailSlider").value = state.settings.tailBuffer;
+  $("ceilSlider").value = state.settings.altCeil;
+  $("rangeSlider").value = state.settings.range;
+}
+
+function renderPlaneCard(p) {
+  const s = livePlaneStatus(p);
+  const altClass = p.altFt < 5000 ? "alert" : p.altFt < 10000 ? "warn" : "";
+  const dstClass = s === "audible" ? "alert" : s === "approaching" ? "warn" : "";
+  const pillText = { audible:"ON MIC", approaching:"WARNING", clear:"TRACKED", high:"HIGH ALT" };
+
+  let extra = "";
+  if (p.micHeardIn !== null && s !== "audible") {
+    const cls = s === "approaching" ? "warn" : "";
+    extra += '<div><span class="lbl">PLANE IN</span><span class="val ' + cls + '">' + fmtLive(p.micHeardIn) + '</span></div>';
+  }
+  if (p.hotHeardIn !== null && liveSec(p.hotHeardIn) !== null && liveSec(p.hotHeardIn) > 0) {
+    extra += '<div><span class="lbl">HOT ZONE</span><span class="val warn">' + fmtLive(p.hotHeardIn) + '</span></div>';
+  }
+  if (s === "audible" && p.micClearIn !== null) {
+    extra += '<div><span class="lbl">SOUND CLEAR</span><span class="val alert">' + fmtLive(p.micClearIn) + '</span></div>';
+  }
+  if (p.tCPA > 1 && p.tCPA < 600) {
+    extra += '<div><span class="lbl">CLOSEST</span><span class="val">' + p.cpaKm.toFixed(1) + ' km @ ' + fmtLive(p.tCPA) + '</span></div>';
+  }
+
+  return (
+    '<div class="card ' + s + '">' +
+      '<div class="card-head">' +
+        '<div><span class="callsign">' + esc(p.callsign) + '</span>' +
+        '<span class="ctype">' + esc(p.type) + '</span>' +
+        (p.reg ? '<span class="ctype">' + esc(p.reg) + '</span>' : '') +
+        '</div>' +
+        '<span class="pill ' + s + '">' + pillText[s] + '</span>' +
+      '</div>' +
+      '<div class="grid">' +
+        '<div><span class="lbl">DIST</span><span class="val ' + dstClass + '">' + p.horizKm.toFixed(1) + ' km ' + compassDir(p.bearing) + '</span></div>' +
+        '<div><span class="lbl">ALT</span><span class="val ' + altClass + '">' + Math.round(p.altFt).toLocaleString() + ' ft</span></div>' +
+        '<div><span class="lbl">SPEED</span><span class="val">' + Math.round(p.gs) + ' kt</span></div>' +
+        '<div><span class="lbl">HDG</span><span class="val">' + Math.round(p.track) + '° ' + compassDir(p.track) + '</span></div>' +
+        extra +
+        '<div><span class="lbl">SND DELAY</span><span class="val">' + p.soundDelayNow.toFixed(1) + 's</span></div>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function renderPlanes() {
+  const concerning = state.analyzed.filter(p => ["audible","approaching"].includes(livePlaneStatus(p)));
+  const future = state.analyzed
+    .filter(p => livePlaneStatus(p) === "clear" && p.micHeardIn !== null)
+    .sort((a,b) => (liveSec(a.micHeardIn) ?? 99999) - (liveSec(b.micHeardIn) ?? 99999))
+    .slice(0, 5);
+  const nearby = state.analyzed
+    .filter(p => livePlaneStatus(p) === "clear" && p.micHeardIn === null)
+    .slice(0, 4);
+
+  $("threats").innerHTML = concerning.length > 0
+    ? '<div class="sec">Sound Risk</div>' + concerning.map(renderPlaneCard).join("")
+    : "";
+
+  const trackingCards = future.concat(nearby).slice(0, 8);
+  $("tracking").innerHTML = trackingCards.length > 0
+    ? '<div class="sec">Tracking (' + state.analyzed.length + ')</div>' + trackingCards.map(renderPlaneCard).join("")
+    : "";
+
+  $("empty").classList.toggle("hidden",
+    !(state.loc && state.adsb.state === "ok" && state.analyzed.length === 0));
+}
+
+function renderAll() {
+  recomputeAnalyzed();
+  renderMeta();
+  renderBanner();
+  renderLocPicker();
+  renderAdsbError();
+  renderSettings();
+  setupCanvas();
+  renderPlanes();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANVAS RADAR
+// ═══════════════════════════════════════════════════════════════════════════
+function setupCanvas() {
+  const canvas = $("radar");
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const viewportH = window.innerHeight || 800;
+  const locationSetCompact = !!state.loc && !state.showLocPicker && !state.showSets;
+  const compactMax = Math.max(230, Math.min(330, viewportH - 310));
+  const maxSize = locationSetCompact ? compactMax : 390;
+  const size = Math.max(220, Math.min(wrap.clientWidth - 10, maxSize));
+  canvas.width = Math.floor(size * dpr);
+  canvas.height = Math.floor(size * dpr);
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+}
+
+function livePlaneXY(p) {
+  const age = feedAgeSec();
+  return { x: p.localX + p.vx * age, y: p.localY + p.vy * age };
+}
+
+function radarTimerLabel(p) {
+  const s = livePlaneStatus(p);
+  if (s === "high") return "";
+  if (s === "audible") return p.micClearIn !== null ? "-" + fmtLive(p.micClearIn) : "-";
+  if (p.micHeardIn !== null) return "+" + fmtLive(p.micHeardIn);
+  return "";
+}
+
+function drawRadar() {
+  const canvas = $("radar");
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width / dpr, H = canvas.height / dpr;
+  const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 24;
+  const sc = R / state.settings.range;
+  const sweepDeg = state.sweep;
+  const mic = state.settings.micRange;
+  const hot = state.settings.hotRange;
+  const range = state.settings.range;
+  const planes = state.analyzed;
+  const echoes = state.echoes;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(dpr, dpr);
+
+  const bg = ctx.createRadialGradient(cx,cy,0, cx,cy,R);
+  bg.addColorStop(0, "#061510");
+  bg.addColorStop(1, "#020907");
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle = bg; ctx.fill();
+
+  ctx.strokeStyle = "rgba(0,90,50,0.18)"; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(cx,cy-R); ctx.lineTo(cx,cy+R); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-R,cy); ctx.lineTo(cx+R,cy); ctx.stroke();
+  ctx.strokeStyle = "rgba(0,90,50,0.08)";
+  ctx.beginPath(); ctx.moveTo(cx-R*0.707,cy-R*0.707); ctx.lineTo(cx+R*0.707,cy+R*0.707); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx+R*0.707,cy-R*0.707); ctx.lineTo(cx-R*0.707,cy+R*0.707); ctx.stroke();
+
+  const step = range <= 20 ? 5 : range <= 40 ? 10 : 20;
+  for (let r = step; r < range + 0.1; r += step) {
+    ctx.beginPath(); ctx.arc(cx, cy, r*sc, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(0,110,60,0.2)"; ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.fillStyle = "rgba(0,150,75,0.35)";
+    ctx.font = "8px 'JetBrains Mono',monospace"; ctx.textAlign = "left";
+    ctx.fillText(r + "", cx + r*sc + 2, cy + 10);
+  }
+
+  if (mic <= range) {
+    ctx.beginPath(); ctx.arc(cx, cy, mic*sc, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(212,160,23,0.78)"; ctx.lineWidth = 1.7;
+    ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(212,160,23,0.72)";
+    ctx.font = "bold 9px 'JetBrains Mono',monospace"; ctx.textAlign = "center";
+    ctx.fillText("MIC " + mic + "km", cx, cy - mic*sc - 5);
+  }
+
+  if (hot <= range) {
+    ctx.beginPath(); ctx.arc(cx, cy, hot*sc, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(255,80,80,0.6)"; ctx.lineWidth = 1.3;
+    ctx.setLineDash([2,4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  const sweepRad = (sweepDeg - 90) * D2R;
+  const FAN = 56 * D2R, N = 26;
+  for (let i = 0; i < N; i++) {
+    const t = i/N;
+    const a0 = sweepRad - (1-t+1/N)*FAN;
+    const a1 = sweepRad - (1-t)*FAN;
+    ctx.beginPath(); ctx.moveTo(cx,cy);
+    ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+    ctx.fillStyle = "rgba(0,255,110," + ((1-t)*0.06) + ")"; ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + R*Math.cos(sweepRad), cy + R*Math.sin(sweepRad));
+  ctx.strokeStyle = "rgba(0,255,100,0.9)"; ctx.lineWidth = 1.3; ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
+
+  planes.forEach(p => {
+    const s = livePlaneStatus(p);
+    if (s !== "audible" && s !== "approaching") return;
+    const now = livePlaneXY(p);
+    const px = cx + now.x*sc, py = cy - now.y*sc;
+    const PRED = 180;
+    const ex = cx + (now.x + p.vx*PRED)*sc;
+    const ey = cy - (now.y + p.vy*PRED)*sc;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey);
+    ctx.strokeStyle = s === "audible" ? "rgba(255,80,80,0.45)" : "rgba(255,200,50,0.4)";
+    ctx.lineWidth = 1.1; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  planes.forEach(p => {
+    const now = livePlaneXY(p);
+    const px = cx + now.x*sc, py = cy - now.y*sc;
+    if (Math.sqrt((px-cx)*(px-cx)+(py-cy)*(py-cy)) > R + 18) return;
+    const s = livePlaneStatus(p);
+    const COL = s === "audible" ? "#ff5050"
+              : s === "approaching" ? "#ffd040"
+              : s === "high" ? "#50606a" : "#00ff8a";
+
+    const eAt = echoes.get(p.icao);
+    if (eAt) {
+      const age = (Date.now()-eAt)/1000;
+      if (age < 5) {
+        const op = (1 - age/5) * 0.58;
+        const r6 = parseInt(COL.slice(1,3),16);
+        const g6 = parseInt(COL.slice(3,5),16);
+        const b6 = parseInt(COL.slice(5,7),16);
+        const grd = ctx.createRadialGradient(px, py, 0, px, py, 18);
+        grd.addColorStop(0, "rgba(" + r6 + "," + g6 + "," + b6 + "," + op + ")");
+        grd.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.beginPath(); ctx.arc(px, py, 18, 0, Math.PI*2);
+        ctx.fillStyle = grd; ctx.fill();
+      }
+    }
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(p.track * D2R);
+    ctx.beginPath();
+    ctx.moveTo(0,-9); ctx.lineTo(5.5,7); ctx.lineTo(0,3); ctx.lineTo(-5.5,7);
+    ctx.closePath(); ctx.fillStyle = COL; ctx.fill();
+    ctx.restore();
+
+    const timer = radarTimerLabel(p);
+    ctx.font = "bold 8px 'JetBrains Mono',monospace";
+    ctx.textAlign = "left";
+    const label = timer || p.callsign.slice(0,7);
+    const w = ctx.measureText(label).width + 8;
+    const bx = Math.min(Math.max(px + 9, 5), W - w - 5);
+    const by = Math.min(Math.max(py - 18, 5), H - 14);
+    if (timer) {
+      ctx.fillStyle = s === "audible" ? "rgba(60,5,5,0.85)" : "rgba(45,30,0,0.82)";
+      if (s === "clear") ctx.fillStyle = "rgba(0,20,10,0.75)";
+      ctx.fillRect(bx, by, w, 13);
+      ctx.strokeStyle = COL; ctx.lineWidth = 0.7; ctx.strokeRect(bx, by, w, 13);
+    }
+    ctx.fillStyle = COL; ctx.globalAlpha = 0.95;
+    ctx.fillText(label, bx + 4, by + 10);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = COL; ctx.globalAlpha = 0.7;
+    ctx.font = "6px 'JetBrains Mono',monospace"; ctx.textAlign = "left";
+    ctx.fillText(p.callsign.slice(0,8), bx + 4, by + 20);
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+
+  [
+    { l:"N", x:cx, y:cy-R-13 },
+    { l:"S", x:cx, y:cy+R+15 },
+    { l:"E", x:cx+R+13, y:cy+4 },
+    { l:"W", x:cx-R-13, y:cy+4 },
+  ].forEach(c => {
+    ctx.font = "bold 10px 'Saira Condensed',sans-serif";
+    ctx.fillStyle = "rgba(60,130,80,0.65)";
+    ctx.textAlign = "center";
+    ctx.fillText(c.l, c.x, c.y);
+  });
+
+  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2);
+  ctx.fillStyle = "#d4a017"; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2);
+  ctx.strokeStyle = "rgba(212,160,23,0.3)"; ctx.lineWidth = 1; ctx.stroke();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+async function doSearch() {
+  const q = state.search.query.trim();
+  if (!q) return;
+  state.search.loading = true;
+  state.search.error = null;
+  state.search.results = [];
+  renderLocPicker();
+  try {
+    const results = await geocode(q);
+    state.search.results = results;
+    state.search.error = results.length === 0
+      ? "No matches. Try a city, postal code, or full address."
+      : null;
+  } catch (e) {
+    state.search.error = e.message + " — if this persists, use phone GPS or manual coordinates.";
+  } finally {
+    state.search.loading = false;
+    renderLocPicker();
+  }
+}
+
+async function doFetch() {
+  if (!state.loc) return;
+  state.adsb.state = "loading";
+  renderMeta();
+  renderBanner();
+  renderAdsbError();
+
+  const nm = Math.max(25, Math.ceil((state.settings.range * 1.7) / NM_TO_KM));
+  try {
+    const result = await fetchADSB(state.loc.lat, state.loc.lon, nm, state.adsb.preferredSource);
+    state.adsb.preferredSource = result.source;
+    state.adsb.source = result.source;
+    state.adsb.planes = result.planes;
+    state.adsb.lastFetch = Date.now();
+    state.adsb.state = "ok";
+    state.adsb.error = null;
+  } catch (e) {
+    state.adsb.state = "error";
+    state.adsb.error = e.message;
+  }
+  renderAll();
+}
+
+function startFetchLoop() {
+  if (state.fetchTimer) clearInterval(state.fetchTimer);
+  doFetch();
+  if (!state.paused) {
+    state.fetchTimer = setInterval(doFetch, FETCH_INTERVAL_MS);
+  }
+}
+
+function stopFetchLoop() {
+  if (state.fetchTimer) { clearInterval(state.fetchTimer); state.fetchTimer = null; }
+}
+
+function applyMicPackage(packageId) {
+  if (packageId in MIC_PACKAGE_MICS) {
+    state.settings.micPackage = packageId;
+    state.settings.activeMics = [...MIC_PACKAGE_MICS[packageId]];
+    updateSettingsFromActiveMics();
+    return;
+  }
+
+  state.settings.micPackage = "custom_specific";
+  updateSettingsFromActiveMics();
+}
+
+function saveSettings() {
+  writeJSON(SETTINGS_KEY, state.settings);
+}
+
+function saveUI() {
+  writeJSON(UI_KEY, { showSets: state.showSets });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════════
+function animLoop(ts) {
+  if (!state.rafLast) state.rafLast = ts;
+  const dt = Math.min((ts - state.rafLast) / 1000, 0.1);
+  state.rafLast = ts;
+
+  state.prevSweep = state.sweep;
+  state.sweep = (state.sweep + SWEEP_SPEED * dt) % 360;
+  const s = state.sweep, prev = state.prevSweep;
+
+  state.analyzed.forEach(pl => {
+    if (pl.tooHigh) return;
+    const b = pl.bearing;
+    const hit = prev < s ? (b >= prev && b < s) : (b >= prev || b < s);
+    if (hit) state.echoes.set(pl.icao, Date.now());
+  });
+
+  if (Math.floor(ts/1000) !== Math.floor((ts-dt*1000)/1000)) {
+    renderMeta();
+    renderBanner();
+    renderPlanes();
+  }
+
+  drawRadar();
+  requestAnimationFrame(animLoop);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EVENT WIRING
+// ═══════════════════════════════════════════════════════════════════════════
+function wireEvents() {
+  $("searchInput").addEventListener("input", e => {
+    state.search.query = e.target.value;
+    $("searchBtn").disabled = !state.search.query.trim();
+  });
+  $("searchInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); doSearch(); }
+  });
+  $("searchBtn").addEventListener("click", doSearch);
+
+  $("searchResults").addEventListener("click", e => {
+    const btn = e.target.closest(".result");
+    if (!btn) return;
+    const i = parseInt(btn.getAttribute("data-i"));
+    const r = state.search.results[i];
+    if (r) setLocation(r);
+  });
+
+  $("gpsBtn").addEventListener("click", tryGPS);
+
+  $("lastBtn").addEventListener("click", () => {
+    if (state.savedLoc) setLocation(state.savedLoc);
+  });
+
+  $("coordBtn").addEventListener("click", setFromManual);
+  $("latInput").addEventListener("keydown", e => { if (e.key === "Enter") setFromManual(); });
+  $("lonInput").addEventListener("keydown", e => { if (e.key === "Enter") setFromManual(); });
+
+  $("cityRow").innerHTML = CITIES.map(c =>
+    '<button class="city-btn" data-city="' + esc(c.name) + '">' + esc(c.name) + '</button>'
+  ).join("");
+  $("cityRow").addEventListener("click", e => {
+    const btn = e.target.closest(".city-btn");
+    if (!btn) return;
+    const c = CITIES.find(x => x.name === btn.getAttribute("data-city"));
+    if (c) setLocation({ lat: c.lat, lon: c.lon, shortLabel: c.name, fullLabel: c.name, source: "city" });
+  });
+
+  $("changeBtn").addEventListener("click", () => {
+    state.showLocPicker = true;
+    renderLocPicker();
+  });
+
+  $("btnSettings").addEventListener("click", () => {
+    state.showSets = !state.showSets;
+    saveUI();
+    renderSettings();
+    setupCanvas();
+  });
+  $("btnPause").addEventListener("click", () => {
+    state.paused = !state.paused;
+    $("btnPause").textContent = state.paused ? "▶ Resume" : "⏸ Pause";
+    $("btnPause").classList.toggle("active", state.paused);
+    if (state.paused) stopFetchLoop();
+    else if (state.loc) startFetchLoop();
+  });
+  $("btnRefresh").addEventListener("click", doFetch);
+
+  $("micPackageSelect").addEventListener("change", e => {
+    applyMicPackage(e.target.value);
+    saveSettings();
+    renderAll();
+    if (state.loc) doFetch();
+  });
+
+  $("micChipGrid").addEventListener("click", e => {
+    const btn = e.target.closest(".mic-chip");
+    if (!btn) return;
+    const id = btn.getAttribute("data-mic");
+    if (!MIC_CHOICES.includes(id)) return;
+    const active = new Set(getActiveMicIds());
+    if (active.has(id)) active.delete(id);
+    else active.add(id);
+    state.settings.activeMics = [...active];
+    state.settings.micPackage = "custom_specific";
+    updateSettingsFromActiveMics();
+    saveSettings();
+    renderAll();
+    if (state.loc) doFetch();
+  });
+
+  const bindSlider = (id, key, fmt, parse) => {
+    $(id).addEventListener("input", e => {
+      state.settings[key] = parse ? parse(e.target.value) : parseFloat(e.target.value);
+      if (["micRange", "hotRange", "tailBuffer", "altCeil", "range"].includes(key)) {
+        state.settings.micPackage = "custom_specific";
+      }
+      if (key === "range") state.settings.rangeAuto = false;
+      if (key === "micRange" && state.settings.rangeAuto !== false) {
+        state.settings.range = autoRadarRangeFor(state.settings.micRange, state.settings.range);
+      }
+      if (state.settings.hotRange > state.settings.micRange) state.settings.hotRange = state.settings.micRange;
+      if (state.settings.range < state.settings.micRange + 5) state.settings.range = state.settings.micRange + 5;
+      saveSettings();
+      renderAll();
+    });
+  };
+  bindSlider("micSlider", "micRange");
+  bindSlider("hotSlider", "hotRange");
+  bindSlider("tailSlider", "tailBuffer", null, v => parseInt(v));
+  bindSlider("ceilSlider", "altCeil", null, v => parseInt(v));
+  bindSlider("rangeSlider", "range", null, v => parseInt(v));
+
+  window.addEventListener("resize", setupCanvas);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+function loadFromURL() {
+  const p = new URLSearchParams(location.search);
+  const lat = parseFloat(p.get("lat"));
+  const lon = parseFloat(p.get("lon"));
+  if (isFinite(lat) && isFinite(lon)) {
+    state.loc = {
+      lat, lon,
+      accuracy: null,
+      shortLabel: p.get("label") || "URL Location",
+      fullLabel: "URL coordinates",
+      source: "url"
+    };
+    state.showLocPicker = false;
+    writeJSON(STORE_KEY, state.loc);
+  }
+}
+
+function init() {
+  const savedSettings = readJSON(SETTINGS_KEY);
+  if (savedSettings) state.settings = { ...state.settings, ...savedSettings };
+  if (state.settings.rangeAuto === undefined) state.settings.rangeAuto = true;
+  const savedUI = readJSON(UI_KEY);
+  if (savedUI && typeof savedUI.showSets === "boolean") state.showSets = savedUI.showSets;
+
+  // Backward compatibility with older saved versions.
+  if (!state.settings.micPackage && state.settings.micProfile) {
+    if (state.settings.micProfile === "boom_shotgun") state.settings.activeMics = ["mkh416"];
+    else if (state.settings.micProfile === "quiet_wide") state.settings.micPackage = "exterior_quiet_dialogue";
+    else if (state.settings.micProfile in MIC_PACKAGE_MICS) state.settings.micPackage = state.settings.micProfile;
+    else if (MIC_CHOICES.includes(state.settings.micProfile)) {
+      state.settings.micPackage = "custom_specific";
+      state.settings.activeMics = [state.settings.micProfile];
+    }
+  }
+  if (!(state.settings.micPackage in MIC_PACKAGE_MICS)) state.settings.micPackage = "custom_specific";
+  if (!Array.isArray(state.settings.activeMics) || state.settings.activeMics.length === 0) {
+    if (state.settings.micPackage in MIC_PACKAGE_MICS) state.settings.activeMics = [...MIC_PACKAGE_MICS[state.settings.micPackage]];
+    else state.settings.activeMics = ["mkh416", "cos11d"];
+  }
+  if (state.settings.micPackage in MIC_PACKAGE_MICS || getActiveMicIds().length > 0) updateSettingsFromActiveMics();
+  if (state.settings.hotRange > state.settings.micRange) state.settings.hotRange = state.settings.micRange;
+  if (state.settings.range < state.settings.micRange + 5) state.settings.range = state.settings.micRange + 5;
+
+  state.savedLoc = readJSON(STORE_KEY);
+  loadFromURL();
+
+  setupCanvas();
+  wireEvents();
+
+  if (!state.loc && state.savedLoc) {
+    state.gps.message = "A saved location is available. Use it if you are still at that filming location.";
+  }
+
+  renderAll();
+  if (state.loc) startFetchLoop();
+  requestAnimationFrame(animLoop);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
